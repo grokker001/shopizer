@@ -41,6 +41,9 @@ public class PersistablePaymentPopulator extends AbstractDataPopulator<Persistab
 			
 			Map<String,String> metadata = new HashMap<String,String>();
 			metadata.put("paymentToken", source.getPaymentToken());
+			if ("stripe".equals(source.getPaymentModule())) {
+				metadata.put("stripe_token", source.getPaymentToken());
+			}
 			target.setPaymentMetaData(metadata);
 			
 			return target;

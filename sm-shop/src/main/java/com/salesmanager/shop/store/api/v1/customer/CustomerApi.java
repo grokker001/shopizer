@@ -5,6 +5,8 @@ import java.util.Optional;
 import javax.inject.Inject;
 import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
+
+import com.salesmanager.shop.store.api.exception.UnauthorizedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -249,6 +251,29 @@ public class CustomerApi {
       String userName = principal.getName();
 
       return customerFacade.update(userName, customer, merchantStore);
+  }
+
+  @GetMapping("/auth/customer/{id}")
+  @ApiOperation(
+          httpMethod = "GET",
+          value = "Gets a loged in customer profile",
+          notes = "Requires authentication",
+          produces = "application/json",
+          response = PersistableCustomer.class)
+  @ApiImplicitParams({
+          @ApiImplicitParam(name = "store", dataType = "string", defaultValue = "DEFAULT")
+  })
+  public ReadableCustomer getCustomer(
+          @PathVariable Long id,
+          @ApiIgnore MerchantStore merchantStore,
+          @ApiIgnore Language language,
+          HttpServletRequest request) {
+    Principal principal = request.getUserPrincipal();
+    String userName = principal.getName();
+    ReadableCustomer gotCustomer =  customerFacade.getCustomerById(id, merchantStore, language);
+    if (!userName.equalsIgnoreCase(gotCustomer.getEmailAddress())) {
+      throw new UnauthorizedException("Unauthorized");
+    } else return gotCustomer;
   }
   
   

@@ -87,7 +87,7 @@ public class CustomerPopulator extends
 			if(source.getGender()!=null && target.getGender()==null) {
 				target.setGender( com.salesmanager.core.model.customer.CustomerGender.valueOf( source.getGender() ) );
 			}
-			if(target.getGender()==null) {
+			if(source.getGender()==null && target.getGender()==null) {
 				target.setGender( com.salesmanager.core.model.customer.CustomerGender.M);
 			}
 
