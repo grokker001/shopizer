@@ -1,0 +1,1 @@
+nohup java -jar ROOT.war > console.log 2>&1 &
