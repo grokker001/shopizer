@@ -21,7 +21,7 @@ public interface ShoppingCartService extends SalesManagerEntityService<Long, Sho
 
 	ShoppingCart getByCode(String code, MerchantStore store) throws ServiceException;
 
-	ShoppingCart getByCustomer(Customer customer) throws ServiceException;
+	//ShoppingCart getByCustomer(Customer customer) throws ServiceException;
 
 	/**
 	 * Creates a list of ShippingProduct based on the ShoppingCart if items are
@@ -65,7 +65,7 @@ public interface ShoppingCartService extends SalesManagerEntityService<Long, Sho
 	 * @return {@link ShoppingCart} merged Shopping Cart
 	 * @throws Exception
 	 */
-	public ShoppingCart mergeShoppingCarts(final ShoppingCart userShoppingCart, final ShoppingCart sessionCart,
+	ShoppingCart mergeShoppingCarts(final ShoppingCart userShoppingCart, final ShoppingCart sessionCart,
 			final MerchantStore store) throws Exception;
 
 	/**

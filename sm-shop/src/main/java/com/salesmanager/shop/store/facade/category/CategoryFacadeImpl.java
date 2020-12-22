@@ -26,7 +26,9 @@ import com.salesmanager.core.business.services.merchant.MerchantStoreService;
 import com.salesmanager.core.model.catalog.category.Category;
 import com.salesmanager.core.model.catalog.product.attribute.ProductAttribute;
 import com.salesmanager.core.model.catalog.product.attribute.ProductOption;
+import com.salesmanager.core.model.catalog.product.attribute.ProductOptionDescription;
 import com.salesmanager.core.model.catalog.product.attribute.ProductOptionValue;
+import com.salesmanager.core.model.catalog.product.attribute.ProductOptionValueDescription;
 import com.salesmanager.core.model.merchant.MerchantStore;
 import com.salesmanager.core.model.reference.language.Language;
 import com.salesmanager.shop.mapper.Mapper;
@@ -318,6 +320,18 @@ public class CategoryFacadeImpl implements CategoryFacade {
 		return readableCategory;
 	}
 
+	@Override
+	public ReadableCategory getCategoryByFriendlyUrl(MerchantStore store, String friendlyUrl, Language language) throws Exception {
+		Validate.notNull(friendlyUrl, "Category search friendly URL must not be null");
+		ReadableCategoryPopulator categoryPopulator = new ReadableCategoryPopulator();
+		ReadableCategory readableCategory = new ReadableCategory();
+
+		Category category = categoryService.getBySeUrl(store, friendlyUrl);
+		categoryPopulator.populate(category, readableCategory, store, language);
+
+		return readableCategory;
+	}
+
 	private Category getById(MerchantStore store, Long id) throws Exception {
 		Validate.notNull(id, "category id must not be null");
 		Validate.notNull(store, "MerchantStore must not be null");
@@ -381,17 +395,35 @@ public class CategoryFacadeImpl implements CategoryFacade {
 				List<ProductOptionValue> values = rawFacet.get(option.getCode());
 
 				ReadableProductVariant productVariant = new ReadableProductVariant();
-				productVariant.setName(option.getDescriptionsSettoList().get(0).getName());
-				List<ReadableProductVariantValue> optionValues = new ArrayList<ReadableProductVariantValue>();
-				for (ProductOptionValue value : values) {
-					ReadableProductVariantValue v = new ReadableProductVariantValue();
-					v.setName(value.getDescriptionsSettoList().get(0).getName());
-					v.setOption(option.getId());
-					v.setValue(value.getId());
-					optionValues.add(v);
+				Optional<ProductOptionDescription>  optionDescription = option.getDescriptions().stream().filter(o -> o.getLanguage().getId() == language.getId()).findFirst();
+				if(optionDescription.isPresent()) {
+					productVariant.setName(optionDescription.get().getName());
+					productVariant.setId(optionDescription.get().getId());
+					productVariant.setCode(optionDescription.get().getProductOption().getCode());
+					List<ReadableProductVariantValue> optionValues = new ArrayList<ReadableProductVariantValue>();
+					for (ProductOptionValue value : values) {
+						Optional<ProductOptionValueDescription>  optionValueDescription = value.getDescriptions().stream().filter(o -> o.getLanguage().getId() == language.getId()).findFirst();
+						ReadableProductVariantValue v = new ReadableProductVariantValue();
+						v.setCode(value.getCode());
+						v.setName(value.getDescriptionsSettoList().get(0).getName());
+						v.setDescription(value.getDescriptionsSettoList().get(0).getDescription());
+						if(optionValueDescription.isPresent()) {
+							v.setName(optionValueDescription.get().getName());
+							v.setDescription(optionValueDescription.get().getDescription());
+						}
+						v.setOption(option.getId());
+						v.setValue(value.getId());
+						optionValues.add(v);
+					}
+					
+					//sort by name
+					// remove duplicates
+					List<ReadableProductVariantValue> readableValues = optionValues.stream().distinct().collect(Collectors.toList());
+					readableValues.sort(Comparator.comparing(ReadableProductVariantValue::getName));
+					
+					productVariant.setOptions(readableValues);
+					variants.add(productVariant);
 				}
-				productVariant.setOptions(optionValues);
-				variants.add(productVariant);
 			}
 
 			return variants;
@@ -406,8 +438,8 @@ public class CategoryFacadeImpl implements CategoryFacade {
 		Validate.notNull(child, "Child category must not be null");
 		Validate.notNull(parent, "Parent category must not be null");
 		Validate.notNull(store, "Merhant must not be null");
-		
-		
+
+
 		try {
 
 			Category c = categoryService.getById(child, store.getId());
@@ -415,11 +447,11 @@ public class CategoryFacadeImpl implements CategoryFacade {
 			if(c == null) {
 				throw new ResourceNotFoundException("Category with id [" + child + "] for store [" + store.getCode() + "]");
 			}
-			
+
 			if(parent.longValue()==-1) {
 				categoryService.addChild(null, c);
 				return;
-				
+
 			}
 
 			Category p = categoryService.getById(parent, store.getId());

@@ -3,6 +3,7 @@ package com.salesmanager.shop.store.api.v1.product;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 import javax.inject.Inject;
@@ -10,6 +11,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.validation.Valid;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,8 +39,10 @@ import com.salesmanager.core.model.merchant.MerchantStore;
 import com.salesmanager.core.model.reference.language.Language;
 import com.salesmanager.shop.model.catalog.product.LightPersistableProduct;
 import com.salesmanager.shop.model.catalog.product.PersistableProduct;
+import com.salesmanager.shop.model.catalog.product.ProductPriceRequest;
 import com.salesmanager.shop.model.catalog.product.ReadableProduct;
 import com.salesmanager.shop.model.catalog.product.ReadableProductList;
+import com.salesmanager.shop.model.catalog.product.ReadableProductPrice;
 import com.salesmanager.shop.model.entity.EntityExists;
 import com.salesmanager.shop.store.api.exception.ResourceNotFoundException;
 import com.salesmanager.shop.store.api.exception.UnauthorizedException;
@@ -62,9 +66,9 @@ import springfox.documentation.annotations.ApiIgnore;
  */
 @Controller
 @RequestMapping("/api/v1")
-@Api(tags = {"Product management resource (Product Management Api)"})
+@Api(tags = {"Product display and management resource (Product display and Management Api)"})
 @SwaggerDefinition(tags = {
-    @Tag(name = "Product management resource", description = "Add product, edit product and delete product")
+    @Tag(name = "Product management resource", description = "View product, Add product, edit product and delete product")
 })
 public class ProductApi {
 
@@ -160,7 +164,7 @@ public class ProductApi {
 	@ApiImplicitParams({ @ApiImplicitParam(name = "store", dataType = "String", defaultValue = "DEFAULT"),
 		@ApiImplicitParam(name = "lang", dataType = "String", defaultValue = "en") })
   public void delete(
-      @PathVariable Long id, 
+      @PathVariable Long id,
       @ApiIgnore MerchantStore merchantStore, @ApiIgnore Language language) {
 
 	  productFacade.deleteProduct(id, merchantStore);
@@ -385,10 +389,11 @@ public class ProductApi {
       @RequestParam(value = "name", required = false) String name,
       @RequestParam(value = "sku", required = false) String sku,
       @RequestParam(value = "manufacturer", required = false) Long manufacturer,
+      @RequestParam(value = "optionValues", required = false) List<Long> optionValueIds,
       @RequestParam(value = "status", required = false) String status,
       @RequestParam(value = "owner", required = false) Long owner,
-      @RequestParam(value = "start", required = false) Integer start,
-      @RequestParam(value = "count", required = false) Integer count,
+      @RequestParam(value = "page", required = false) Integer page,//current page 0 .. n allowing navigation
+      @RequestParam(value = "count", required = false) Integer count,//count per page
       @ApiIgnore MerchantStore merchantStore,
       @ApiIgnore Language language,
       HttpServletRequest request,
@@ -396,6 +401,8 @@ public class ProductApi {
       throws Exception {
 
     ProductCriteria criteria = new ProductCriteria();
+    
+    //do not use legacy pagination anymore
     if (lang != null) {
       criteria.setLanguage(lang);
     } else {
@@ -412,23 +419,27 @@ public class ProductApi {
     if (manufacturer != null) {
       criteria.setManufacturerId(manufacturer);
     }
+    
+    if(CollectionUtils.isNotEmpty(optionValueIds)) {
+    	criteria.setOptionValueIds(optionValueIds);
+    }
 
     if (owner != null) {
       criteria.setOwnerId(owner);
     }
 
-    if (start != null) {
-      criteria.setStartIndex(start);
+    if (page != null) {
+      criteria.setStartIndex(page);
     }
-    
+
     if (count != null) {
       criteria.setMaxCount(count);
     }
-    
+
     if(!StringUtils.isBlank(name)) {
     	criteria.setProductName(name);
     }
-    
+
     if(!StringUtils.isBlank(sku)) {
     	criteria.setCode(sku);
     }
@@ -456,7 +467,7 @@ public class ProductApi {
    * API for getting a product
    *
    * @param id
-   * @param lang ?lang=fr|en
+   * @param lang ?lang=fr|en|...
    * @param response
    * @return ReadableProduct
    * @throws Exception
@@ -488,6 +499,67 @@ public class ProductApi {
     return product;
   }
   
+  
+  @RequestMapping(value = "/product/{id}/price", method = RequestMethod.POST)
+  @ApiOperation(httpMethod = "POST", value = "Calculate product price with variants", notes = "Product price calculation from variamts")
+  @ApiResponses(value = {
+			@ApiResponse(code = 200, message = "Price calculated", response = ReadableProductPrice.class) })
+  @ResponseBody
+  @ApiImplicitParams({
+      @ApiImplicitParam(name = "store", dataType = "String", defaultValue = "DEFAULT"),
+      @ApiImplicitParam(name = "lang", dataType = "String", defaultValue = "en")
+  })
+  public ReadableProductPrice price(
+      @PathVariable final Long id,
+      @RequestBody ProductPriceRequest variants,
+      @ApiIgnore MerchantStore merchantStore,
+      @ApiIgnore Language language) {
+    
+	  
+	  return productFacade.getProductPrice(id, variants, merchantStore, language);
+
+    
+
+    
+  }
+
+  /**
+   * API for getting a product
+   *
+   * @param friendlyUrl
+   * @param lang ?lang=fr|en
+   * @param response
+   * @return ReadableProduct
+   * @throws Exception
+   *     <p>/api/v1/products/123
+   */
+  @RequestMapping(value = {"/products/slug/{friendlyUrl}","/products/friendly/{friendlyUrl}"}, method = RequestMethod.GET)
+  @ApiOperation(httpMethod = "GET", value = "Get a product by friendlyUrl (slug)", notes = "For administration and shop purpose. Specifying ?merchant is " +
+          "required otherwise it falls back to DEFAULT")
+  @ApiResponses(value = {
+          @ApiResponse(code = 200, message = "Single product found", response = ReadableProduct.class) })
+  @ResponseBody
+  @ApiImplicitParams({
+          @ApiImplicitParam(name = "store", dataType = "String", defaultValue = "DEFAULT"),
+          @ApiImplicitParam(name = "lang", dataType = "String", defaultValue = "en")
+  })
+  public ReadableProduct getByfriendlyUrl(
+          @PathVariable final String friendlyUrl,
+          @RequestParam(value = "lang", required = false) String lang,
+          @ApiIgnore MerchantStore merchantStore,
+          @ApiIgnore Language language,
+          HttpServletResponse response)
+          throws Exception {
+    ReadableProduct product = productFacade.getProductBySeUrl(merchantStore, friendlyUrl, language);
+
+    if (product == null) {
+      response.sendError(404, "Product not fount for id " + friendlyUrl);
+      return null;
+    }
+
+    return product;
+  }
+
   @ResponseStatus(HttpStatus.OK)
   @GetMapping(value = {"/private/product/unique"}, produces = MediaType.APPLICATION_JSON_VALUE)
   @ApiImplicitParams({
@@ -497,12 +569,12 @@ public class ProductApi {
       response = EntityExists.class)
   public ResponseEntity<EntityExists> exists(
       @RequestParam(value = "code") String code,
-      @ApiIgnore MerchantStore merchantStore, 
+      @ApiIgnore MerchantStore merchantStore,
       @ApiIgnore Language language) {
-    
+
     boolean exists = productFacade.exists(code, merchantStore);
     return new ResponseEntity<EntityExists>(new EntityExists(exists), HttpStatus.OK);
-    
+
   }
 
   @ResponseStatus(HttpStatus.CREATED)
@@ -527,26 +599,26 @@ public class ProductApi {
     try {
       // get the product
       Product product = productService.getById(productId);
-      
+
       if(product == null) {
     	  throw new ResourceNotFoundException("Product id [" + productId + "] is not found");
       }
-      
+
       if(product.getMerchantStore().getId().intValue() != merchantStore.getId().intValue()) {
     	  throw new UnauthorizedException("Product id [" + productId + "] does not belong to store [" + merchantStore.getCode() + "]");
       }
 
       Category category = categoryService.getById(categoryId);
-      
+
       if(category == null) {
     	  throw new ResourceNotFoundException("Category id [" + categoryId + "] is not found");
       }
-      
+
       if(category.getMerchantStore().getId().intValue() != merchantStore.getId().intValue()) {
     	  throw new UnauthorizedException("Category id [" + categoryId + "] does not belong to store [" + merchantStore.getCode() + "]");
       }
-      
-      
+
+
       return productFacade.addProductToCategory(category, product, language);
 
     } catch (Exception e) {
@@ -580,25 +652,25 @@ public class ProductApi {
 
     try {
         Product product = productService.getById(productId);
-        
+
         if(product == null) {
       	  throw new ResourceNotFoundException("Product id [" + productId + "] is not found");
         }
-        
+
         if(product.getMerchantStore().getId().intValue() != merchantStore.getId().intValue()) {
       	  throw new UnauthorizedException("Product id [" + productId + "] does not belong to store [" + merchantStore.getCode() + "]");
         }
 
         Category category = categoryService.getById(categoryId);
-        
+
         if(category == null) {
       	  throw new ResourceNotFoundException("Category id [" + categoryId + "] is not found");
         }
-        
+
         if(category.getMerchantStore().getId().intValue() != merchantStore.getId().intValue()) {
       	  throw new UnauthorizedException("Category id [" + categoryId + "] does not belong to store [" + merchantStore.getCode() + "]");
         }
-      
+
       return productFacade.removeProductFromCategory(category, product, language);
 
     } catch (Exception e) {

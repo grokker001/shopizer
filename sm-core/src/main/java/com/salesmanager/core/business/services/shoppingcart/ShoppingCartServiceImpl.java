@@ -1,20 +1,5 @@
 package com.salesmanager.core.business.services.shoppingcart;
 
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
-import javax.inject.Inject;
-
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.Validate;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import com.salesmanager.core.business.exception.ServiceException;
 import com.salesmanager.core.business.repositories.shoppingcart.ShoppingCartAttributeRepository;
 import com.salesmanager.core.business.repositories.shoppingcart.ShoppingCartItemRepository;
@@ -33,6 +18,20 @@ import com.salesmanager.core.model.shipping.ShippingProduct;
 import com.salesmanager.core.model.shoppingcart.ShoppingCart;
 import com.salesmanager.core.model.shoppingcart.ShoppingCartAttributeItem;
 import com.salesmanager.core.model.shoppingcart.ShoppingCartItem;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.Validate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import javax.inject.Inject;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service("shoppingCartService")
 public class ShoppingCartServiceImpl extends SalesManagerEntityServiceImpl<Long, ShoppingCart>
@@ -45,10 +44,10 @@ public class ShoppingCartServiceImpl extends SalesManagerEntityServiceImpl<Long,
 
 	@Inject
 	private ShoppingCartItemRepository shoppingCartItemRepository;
-	
+
 	@Inject
 	private ShoppingCartAttributeRepository shoppingCartAttributeItemRepository;
-	
+
 	@Inject
 	private PricingService pricingService;
 
@@ -74,14 +73,25 @@ public class ShoppingCartServiceImpl extends SalesManagerEntityServiceImpl<Long,
 
 		try {
 
-			ShoppingCart shoppingCart = shoppingCartRepository.findByCustomer(customer.getId());
-			getPopulatedShoppingCart(shoppingCart);
-			if (shoppingCart != null && shoppingCart.isObsolete()) {
-				delete(shoppingCart);
-				return null;
-			} else {
-				return shoppingCart;
+			List<ShoppingCart> shoppingCarts = shoppingCartRepository.findByCustomer(customer.getId());
+			
+			//elect valid shopping cart
+			List<ShoppingCart> validCart = shoppingCarts.stream()
+					.filter((cart) -> cart.getOrderId()==null)
+					.collect(Collectors.toList());
+			
+			ShoppingCart shoppingCart = null;
+			
+			if(!org.apache.commons.collections.CollectionUtils.isEmpty(validCart)) {
+				shoppingCart = validCart.get(0);
+				getPopulatedShoppingCart(shoppingCart);
+				if (shoppingCart != null && shoppingCart.isObsolete()) {
+					delete(shoppingCart);
+					shoppingCart = null;
+				}
 			}
+			
+			return shoppingCart;
 
 		} catch (Exception e) {
 			throw new ServiceException(e);
@@ -92,14 +102,13 @@ public class ShoppingCartServiceImpl extends SalesManagerEntityServiceImpl<Long,
 	/**
 	 * Save or update a {@link ShoppingCart} for a given customer
 	 */
-	@SuppressWarnings("unchecked")
 	@Override
 	public void saveOrUpdate(ShoppingCart shoppingCart) throws ServiceException {
-		
+
 		Validate.notNull(shoppingCart, "ShoppingCart must not be null");
 		Validate.notNull(shoppingCart.getMerchantStore(), "ShoppingCart.merchantStore must not be null");
-		
-		
+
+
 		try {
 			UserContext userContext = UserContext.getCurrentInstance();
 			if(userContext!=null) {
@@ -108,16 +117,16 @@ public class ShoppingCartServiceImpl extends SalesManagerEntityServiceImpl<Long,
 		} catch(Exception s) {
 			LOGGER.error("Cannot add ip address to shopping cart ", s);
 		}
-		
-		
-		if (shoppingCart.getId() == null || shoppingCart.getId().longValue() == 0) {
+
+
+		if (shoppingCart.getId() == null || shoppingCart.getId() == 0) {
 			super.create(shoppingCart);
 		} else {
 			super.update(shoppingCart);
 		}
-		
 
-		
+
+
 	}
 
 	/**
@@ -204,12 +213,8 @@ public class ShoppingCartServiceImpl extends SalesManagerEntityServiceImpl<Long,
 
 		} catch (javax.persistence.NoResultException nre) {
 			return null;
-		} catch (RuntimeException e) {
+		} catch (Throwable e) {
 			throw new ServiceException(e);
-		} catch (Exception ee) {
-			throw new ServiceException(ee);
-		} catch (Throwable t) {
-			throw new ServiceException(t);
 		}
 
 	}
@@ -223,12 +228,12 @@ public class ShoppingCartServiceImpl extends SalesManagerEntityServiceImpl<Long,
 		}
 	}
 
-	@Override
+/*	@Override
 	@Transactional
 	public ShoppingCart getByCustomer(final Customer customer) throws ServiceException {
 
 		try {
-			ShoppingCart shoppingCart = shoppingCartRepository.findByCustomer(customer.getId());
+			List<ShoppingCart> shoppingCart = shoppingCartRepository.findByCustomer(customer.getId());
 			if (shoppingCart == null) {
 				return null;
 			}
@@ -237,7 +242,7 @@ public class ShoppingCartServiceImpl extends SalesManagerEntityServiceImpl<Long,
 		} catch (Exception e) {
 			throw new ServiceException(e);
 		}
-	}
+	}*/
 
 	@Transactional(noRollbackFor = { org.springframework.dao.EmptyResultDataAccessException.class })
 	private ShoppingCart getPopulatedShoppingCart(final ShoppingCart shoppingCart) throws Exception {
@@ -262,20 +267,11 @@ public class ShoppingCartServiceImpl extends SalesManagerEntityServiceImpl<Long,
 					LOGGER.debug("Obsolete item ? " + item.isObsolete());
 					if (item.isObsolete()) {
 						cartIsObsolete = true;
-					} 
+					}
 				}
 
 				// shoppingCart.setLineItems(shoppingCartItems);
-				boolean refreshCart = false;
-				Set<ShoppingCartItem> refreshedItems = new HashSet<ShoppingCartItem>();
-				for (ShoppingCartItem item : items) {
-/*					if (!item.isObsolete()) {
-						refreshedItems.add(item);
-					} else {
-						refreshCart = true;
-					}*/
-					refreshedItems.add(item);
-				}
+				Set<ShoppingCartItem> refreshedItems = new HashSet<>(items);
 
 				//if (refreshCart) {
 					shoppingCart.setLineItems(refreshedItems);
@@ -303,7 +299,6 @@ public class ShoppingCartServiceImpl extends SalesManagerEntityServiceImpl<Long,
 		Validate.notNull(product.getMerchantStore(), "Product.merchantStore should not be null");
 
 		ShoppingCartItem item = new ShoppingCartItem(product);
-		item.setProductVirtual(product.isProductVirtual());
 
 		// set item price
 		FinalPrice price = pricingService.calculateProductPrice(product);
@@ -339,46 +334,46 @@ public class ShoppingCartServiceImpl extends SalesManagerEntityServiceImpl<Long,
 		if ( (productAttributes != null && productAttributes.size() > 0) || (cartAttributes != null && cartAttributes.size() > 0)) {
 		    if(cartAttributes!=null) {
     			for (ShoppingCartAttributeItem attribute : cartAttributes) {
-    				long attributeId = attribute.getProductAttributeId().longValue();
+    				long attributeId = attribute.getProductAttributeId();
     				boolean existingAttribute = false;
     				for (ProductAttribute productAttribute : productAttributes) {
-    
-    					if (productAttribute.getId().longValue() == attributeId) {
+
+    					if (productAttribute.getId().equals(attributeId)) {
     						attribute.setProductAttribute(productAttribute);
     						attributesList.add(productAttribute);
     						existingAttribute = true;
     						break;
     					}
     				}
-    				
+
     				if(!existingAttribute) {
     					removeAttributesList.add(attribute);
     				}
-    
+
     			}
 		    }
 		}
-		
+
 		//cleanup orphean item
 		if(CollectionUtils.isNotEmpty(removeAttributesList)) {
 			for(ShoppingCartAttributeItem attr : removeAttributesList) {
 				shoppingCartAttributeItemRepository.delete(attr);
 			}
 		}
-		
+
 		//cleanup detached attributes
 		if(CollectionUtils.isEmpty(attributesList)) {
 			item.setAttributes(null);
 		}
-		
-		
+
+
 
 		// set item price
 		FinalPrice price = pricingService.calculateProductPrice(product, attributesList);
 		item.setItemPrice(price.getFinalPrice());
 		item.setFinalPrice(price);
 
-		BigDecimal subTotal = item.getItemPrice().multiply(new BigDecimal(item.getQuantity().intValue()));
+		BigDecimal subTotal = item.getItemPrice().multiply(new BigDecimal(item.getQuantity()));
 		item.setSubTotal(subTotal);
 
 	}
@@ -451,7 +446,7 @@ public class ShoppingCartServiceImpl extends SalesManagerEntityServiceImpl<Long,
 	@Override
 	public ShoppingCart mergeShoppingCarts(final ShoppingCart userShoppingModel, final ShoppingCart sessionCart,
 			final MerchantStore store) throws Exception {
-		if (sessionCart.getCustomerId() != null && sessionCart.getCustomerId() == userShoppingModel.getCustomerId()) {
+		if (sessionCart.getCustomerId() != null && sessionCart.getCustomerId().equals(userShoppingModel.getCustomerId())) {
 			LOGGER.info("Session Shopping cart belongs to same logged in user");
 			if (CollectionUtils.isNotEmpty(userShoppingModel.getLineItems())
 					&& CollectionUtils.isNotEmpty(sessionCart.getLineItems())) {
@@ -556,27 +551,27 @@ public class ShoppingCartServiceImpl extends SalesManagerEntityServiceImpl<Long,
 	@Override
 	@Transactional
 	public void deleteShoppingCartItem(Long id) {
-		
-		
+
+
 		ShoppingCartItem item = shoppingCartItemRepository.findOne(id);
 		if(item != null) {
-			
-			
+
+
 			if(item.getAttributes() != null) {
-				item.getAttributes().stream().forEach(a -> {shoppingCartAttributeItemRepository.deleteById(a.getId());});
+				item.getAttributes().forEach(a -> shoppingCartAttributeItemRepository.deleteById(a.getId()));
 				item.getAttributes().clear();
 			}
-			
-			
+
+
 			//refresh
 			item = shoppingCartItemRepository.findOne(id);
 
 			//delete
 			shoppingCartItemRepository.deleteById(id);
-			
-			
+
+
 		}
-		
+
 
 	}
 

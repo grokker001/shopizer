@@ -55,44 +55,18 @@ public class CustomerApi {
       value = "Creates a customer",
       notes = "Requires administration access",
       produces = "application/json",
-      response = PersistableCustomer.class)
+      response = ReadableCustomer.class)
   @ApiImplicitParams({
       @ApiImplicitParam(name = "store", dataType = "string", defaultValue = "DEFAULT")
   })
-  public PersistableCustomer create(
+  public ReadableCustomer create(
       @ApiIgnore MerchantStore merchantStore,
+      @ApiIgnore Language language,
       @Valid @RequestBody PersistableCustomer customer) {
-      return customerFacade.create(customer, merchantStore);
+      return customerFacade.create(customer, merchantStore, language);
 
   }
-  
-/*  *//**
-   * Update authenticated customer adresses
-   * @param userName
-   * @param merchantStore
-   * @param customer
-   * @return
-   *//*
-  @PutMapping("/auth/customer/{id}")
-  @ApiOperation(
-      httpMethod = "PUT",
-      value = "Updates a customer",
-      produces = "application/json",
-      response = PersistableCustomer.class)
-  @ApiImplicitParams({
-      @ApiImplicitParam(name = "store", dataType = "string", defaultValue = "DEFAULT")
-  })
-  public PersistableCustomer update(
-      @PathVariable String userName,
-      @ApiIgnore MerchantStore merchantStore,
-      @Valid @RequestBody PersistableCustomer customer) {
-      // TODO customer.setUserName
-      // TODO more validation
-      return customerFacade.update(customer, merchantStore);
-  }*/
-  
-  
-  
+
 
   @PutMapping("/private/customer/{id}")
   @ApiOperation(
@@ -112,7 +86,7 @@ public class CustomerApi {
       customer.setId(id);
       return customerFacade.update(customer, merchantStore);
   }
-  
+
   @PatchMapping("/private/customer/{id}/address")
   @ApiOperation(
       httpMethod = "PATCH",
@@ -196,7 +170,7 @@ public class CustomerApi {
    * @param request
    * @return
    */
-  @GetMapping("/private/customer/profile")
+  @GetMapping({"/private/customer/profile", "/auth/customer/profile"})
   @ApiImplicitParams({
       @ApiImplicitParam(name = "store", dataType = "string", defaultValue = "DEFAULT"),
       @ApiImplicitParam(name = "lang", dataType = "string", defaultValue = "en")
@@ -209,7 +183,7 @@ public class CustomerApi {
     String userName = principal.getName();
     return customerFacade.getCustomerByNick(userName, merchantStore, language);
   }
-  
+
   @PatchMapping("/auth/customer/address")
   @ApiOperation(
       httpMethod = "PATCH",
@@ -226,12 +200,12 @@ public class CustomerApi {
       HttpServletRequest request) {
       Principal principal = request.getUserPrincipal();
       String userName = principal.getName();
-      
+
 
       customerFacade.updateAddress(userName, customer, merchantStore);
-  
+
   }
-  
+
   @PutMapping("/auth/customer/{id}")
   @ApiOperation(
       httpMethod = "PUT",
@@ -246,7 +220,7 @@ public class CustomerApi {
       @ApiIgnore MerchantStore merchantStore,
       @Valid @RequestBody PersistableCustomer customer,
       HttpServletRequest request) {
-      
+
       Principal principal = request.getUserPrincipal();
       String userName = principal.getName();
 
@@ -275,6 +249,6 @@ public class CustomerApi {
       throw new UnauthorizedException("Unauthorized");
     } else return gotCustomer;
   }
-  
-  
+
+
 }
